@@ -20,10 +20,11 @@ public class Shooting : MonoBehaviour
 
     private void Shoot(InputAction.CallbackContext pCallback)
     {
-        if (Physics.Raycast(transform.position + shift,transform.forward, out RaycastHit raycastHit, range))
+        if (Physics.Raycast(transform.position + shift, transform.forward, out RaycastHit raycastHit, range))
         {
             if (!raycastHit.transform.tag.Equals("Softwall")) return;
-            TransformTo2D(raycastHit.transform.gameObject, raycastHit.transform.InverseTransformPoint(raycastHit.point));
+            TransformTo2D(raycastHit.transform.gameObject,
+                raycastHit.transform.InverseTransformPoint(raycastHit.point));
         }
     }
 
@@ -35,20 +36,15 @@ public class Shooting : MonoBehaviour
 
         //Mesh projection
         List<Vector2> vertices2D = new List<Vector2>();
-        Matrix4x4 projectionMatrix = new Matrix4x4(new Vector4(1, 0, 0, 0), new Vector4(0, 1, 0, 0),
-            new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0));
-        
         foreach (var currentVertex in originalVertices)
         {
-            Vector4 vertexAs4D = new Vector4(currentVertex.x, currentVertex.y, currentVertex.z, 0);
-            Vector4 flatVertex4D = projectionMatrix * vertexAs4D;
-            Vector2 flatVertex2D = new Vector3(flatVertex4D.x, flatVertex4D.y);
+            Vector2 flatVertex2D = new Vector3(currentVertex.x, currentVertex.y);
             if (!vertices2D.Contains(flatVertex2D))
             {
                 vertices2D.Add(flatVertex2D);
             }
         }
-
+        
         //Todo: Implement any convex hull algorithm
         //Only do this at an OG box.
         //This will be replaced by a convex hull algorithm.
@@ -62,39 +58,41 @@ public class Shooting : MonoBehaviour
         
         //Create hole polygon
         Vector2 hitPosition = new Vector2(pHitPosition.x, pHitPosition.y);
-        
         List<Vector2> hole = new List<Vector2>();
         int step = 4;
-        for (int i = 0; i < step; i++)
+        for (int i = 0; i < step; i++) 
         {
-            Vector2 newVertex = hitPosition + new Vector2(Mathf.Cos((2 * Mathf.PI / step) * i), Mathf.Sin((2 * Mathf.PI / step) * i)) * 0.1f;
-            hole.Add(newVertex);
-            Debug.Log($"Hole element {i} was {newVertex}");
+             Vector2 newVertex = hitPosition + new Vector2(Mathf.Cos((2 * Mathf.PI / step) * i), Mathf.Sin((2 * Mathf.PI / step) * i)) * 0.1f;
+             hole.Add(newVertex);
+             Debug.Log($"Hole element {i} was {newVertex}");
         }
-
+        
         polygon.AddHole(hole);
-
+        
         //Weiler-Atherton Clipping
         //Todo: Implement Weiler-Atherton algorithm
         
-        // //Ear-clipping triangulation
-         _earClipping.SetupClipping(polygon);
-        
-        //=========================================================Clean========================================================
+        //Ear-clipping triangulation
+        _earClipping.SetupClipping(polygon);
         Mesh newMesh = new Mesh();
-        Vector3[] flatVertex3D = new Vector3[polygon.vertices2D.Count];
+        Vector3[] flatVertex3D = new Vector3[_earClipping.vertices.Count];
         int itr = 0;
-        foreach(var vertex in polygon.vertices2D)
+        foreach(var vertex in polygon.GetVertices())
         {
             Vector2 currentVertex = vertex;
+            Debug.Log("Added vertex " + vertex);
             flatVertex3D[itr++] = new Vector3(currentVertex.x, currentVertex.y, 0);
         }
         
         newMesh.vertices = flatVertex3D;
-        newMesh.triangles = _earClipping.Triangulate();
+        int[] trisses = _earClipping.Triangulate();
+        newMesh.triangles = trisses;
         
-        newMesh.RecalculateBounds();
-        newMesh.RecalculateTangents();
+        for (int i = 0; i < trisses.Length; i += 3)
+        {
+            Debug.LogWarning($"The returned triangles were {trisses[i]}, {trisses[i + 1]} and {trisses[i + 2]}");
+        }
+        
         newMesh.RecalculateNormals();
         meshFilter.mesh = newMesh;
     }

@@ -1,67 +1,81 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem.Interactions;
 
 public class EarClipping
 {
-    private LinkedList<Vertex> _vertices;
+    public LinkedList<Vertex> vertices;
 
     public void SetupClipping(Polygon pPolygon)
     {
-        _vertices = new LinkedList<Vertex>();
-        LinkedList<Vector2> vertices = new LinkedList<Vector2>(pPolygon.vertices2D);
-        LinkedListNode<Vertex> currentVertex = null;
-        int itr = 0;
-        for (LinkedListNode<Vector2> current = vertices.First; current != null; current = current.Next)
+        vertices = new LinkedList<Vertex>();
+        foreach(var currentVertex in pPolygon.outerPolygon)
+        {
+            vertices.AddLast(currentVertex);
+        }
+
+        bool ranOnce = true;
+        LinkedListNode<Vertex> startNode = vertices.Find(pPolygon.mutuallyVisible.Value);
+        for (LinkedListNode<Vertex> currentNode = pPolygon.innerXMost; currentNode != pPolygon.innerXMost || ranOnce; currentNode = currentNode.Next ?? currentNode.List.First)
+        {
+            ranOnce = false;
+            LinkedListNode<Vertex> test = new LinkedListNode<Vertex>(currentNode.Value);
+            vertices.AddAfter(startNode, test);
+            startNode = test;
+        }
+
+        vertices.AddAfter(startNode, pPolygon.innerXMostCopy);
+        startNode = vertices.Find(pPolygon.innerXMostCopy);
+        vertices.AddAfter(startNode, pPolygon.mutuallyVisibleCopy);
+
+        //Then check if convex :)
+        for (LinkedListNode<Vertex> current = vertices.First; current != null; current = current.Next)
         {
             var previous = current.Previous ?? current.List.Last;
             var next = current.Next ?? current.List.First;
-            Vertex vertex = new Vertex(current.Value, itr++, IsConvex(previous.Value, current.Value, next.Value));
-            if (currentVertex == null) currentVertex = _vertices.AddFirst(vertex);
-            else _vertices.AddAfter(currentVertex, vertex);
+            current.Value.isConvex = IsConvex(previous.Value.position, current.Value.position, next.Value.position);
         }
-
-        foreach (var cee in _vertices)
+        
+        Debug.LogWarning("vertices as added by the polygon are now: ");
+        foreach (var vertex in vertices)
         {
-            Debug.Log($"Vertices loaded in are index: {cee.index} with the position {cee.position} and IsConvex is: {cee.isConvex}");
+            Debug.Log($"Vertex {vertex.index} has the value {vertex.position} and IsConvex is {vertex.isConvex}");
         }
     }
 
     public int[] Triangulate()
     {
-        int[] tris = new int[(_vertices.Count - 2) * 3];
+        int[] tris = new int[(vertices.Count - 2) * 3];
         int trisIndex = 0;
-        while (_vertices.Count >= 3)
+        while (vertices.Count >= 3)
         {
-            LinkedListNode<Vertex> currentVertexNode = _vertices.First;
-            foreach(var vertex in _vertices)
+            for (LinkedListNode<Vertex> currentVertexNode = vertices.First; currentVertexNode != null; currentVertexNode = currentVertexNode.Next)
             {
                 var previous = currentVertexNode.Previous ?? currentVertexNode.List.Last;
                 var next = currentVertexNode.Next ?? currentVertexNode.List.First;
                 if (currentVertexNode.Value.isConvex)
                 {
-                    //Possible ear?
                     if (IsEar(previous.Value.position, currentVertexNode.Value.position, next.Value.position))
                     {
-                        //Remove ear tip.
-                        //Can remove this here even though I am using foreach since I am breaking anyway.
-                        _vertices.Remove(vertex);
-                        Debug.Log($"First index {previous.Value.index}, second is {currentVertexNode.Value.index} and third is {next.Value.index}");
+                        vertices.Remove(currentVertexNode);
                         //Create triangle
                         tris[trisIndex * 3] = previous.Value.index;
                         tris[trisIndex * 3 + 1] = currentVertexNode.Value.index;
                         tris[trisIndex * 3 + 2] = next.Value.index;
-                        trisIndex++;
+                        trisIndex += 1;
                         
                         //Check if previous and next vertices are reflex and if so; recalculate
                         if (!previous.Value.isConvex)
                         {
-                            previous.Value.isConvex = IsConvex(previous.Value.position, next.Value.position, (next.Next ?? _vertices.First).Value.position);
+                            previous.Value.isConvex = IsConvex(previous.Value.position, next.Value.position, 
+                                (next.Next ?? vertices.First).Value.position);
                         }
 
                         if (!next.Value.isConvex)
                         {
-                            next.Value.isConvex = IsConvex((previous.Previous ?? _vertices.Last).Value.position, previous.Value.position, next.Value.position);
+                            next.Value.isConvex = IsConvex((previous.Previous ?? vertices.Last).Value.position, previous.Value.position,
+                                next.Value.position);
                         }
                         
                         break;
@@ -90,7 +104,7 @@ public class EarClipping
     private bool IsEar(Vector2 previous, Vector2 current, Vector2 next)
     {
         //Is this possibly an ear?
-        foreach (var vertex in _vertices)
+        foreach (var vertex in vertices)
         {
             if (vertex.position == previous || vertex.position == current || vertex.position == next)
                 continue;
@@ -105,9 +119,14 @@ public class EarClipping
     private bool IsConvex(Vector2 previous, Vector2 current, Vector2 next)
     {
         //Convex or Reflex?
-        float angle = Vector2.Angle(next - current, previous - current);
-        if(angle == 180.0f) Debug.LogError("Invalid angle in polygon");
-        return angle < 180;
+        Vector2 edge1 = next - current;
+        Vector2 edge2 = previous - current;
+        float cross = edge1.x * edge2.y - edge1.y * edge2.x;
+        float dot = Vector2.Dot(edge1, edge2);
+        float angle = Mathf.Atan2(Mathf.Abs(cross), dot) * Mathf.Rad2Deg;
+        if (cross > 0) angle = 360 - angle;
+        Debug.Log("Angle was " + angle);
+        return angle < 180.0f;
     }
 }
 
@@ -117,97 +136,105 @@ public class Vertex
     public readonly int index;
     public bool isConvex;
 
-    public Vertex(Vector2 pPosition, int pIndex, bool pIsConvex)
+    public Vertex(Vector2 pPosition, int pIndex)
     {
         position = pPosition;
         index = pIndex;
-        isConvex = pIsConvex;
     }
 }
 
 
 public class Polygon
 {
-    public readonly LinkedList<Vector2> vertices2D;
+    public readonly LinkedList<Vertex> outerPolygon;
+    public LinkedList<Vertex> innerPolygon;
+    public Vertex innerXMostCopy, mutuallyVisibleCopy;
+    public LinkedListNode<Vertex> innerXMost, mutuallyVisible;
+    private List<Vector2> _vertices;
+    private int itr = 0;
 
-    public Polygon(List<Vector2> pVertices2D)
+    public Polygon(List<Vector2> pOuterPolygon)
     {
-        vertices2D = new LinkedList<Vector2>(pVertices2D);
+        outerPolygon = new LinkedList<Vertex>();
+        _vertices = new List<Vector2>();
+        foreach (var currentVertex in pOuterPolygon)
+        {
+            outerPolygon.AddLast(new Vertex(currentVertex, itr++));
+            _vertices.Add(currentVertex);
+        }
     }
 
-    public void AddHole(List<Vector2> pVertices)
+    public void AddHole(List<Vector2> pHoleVertices)
     {
-        var xMostVertex = FindXMostVertex(pVertices);
-        var mutuallyVisibleVertex = FindMutuallyVisibleVertex(xMostVertex);
-        //=========================================================Clean========================================================
-
-        LinkedList<Vector2> verticesAsList = new LinkedList<Vector2>(pVertices);
-        LinkedListNode<Vector2> startNode = verticesAsList.Find(xMostVertex);
-        LinkedListNode<Vector2> lastAddedNode = null;
-        bool iteratedOnce = true;
-
-        for (LinkedListNode<Vector2> current = verticesAsList.Find(xMostVertex); current != startNode || iteratedOnce; current = current.Next ?? current.List.First)
+        innerPolygon = new LinkedList<Vertex>();
+        foreach (var currentVertex in pHoleVertices)
         {
-            iteratedOnce = false;
-            LinkedListNode<Vector2> test = new LinkedListNode<Vector2>(current.Value);
-            vertices2D.AddAfter(mutuallyVisibleVertex, test);
-            mutuallyVisibleVertex = test;
-            lastAddedNode = test;
+            innerPolygon.AddLast(new Vertex(currentVertex, itr++));
+            _vertices.Add(currentVertex);
         }
+        
+        //This one must be duplicated
+        innerXMost = FindXMostVertex();
+        
+        //This one must be duplicated
+        mutuallyVisible = FindMutuallyVisibleVertex();
 
-        vertices2D.AddAfter(lastAddedNode, xMostVertex);
-        vertices2D.AddAfter(lastAddedNode.Next, mutuallyVisibleVertex.Value);
+        mutuallyVisibleCopy = new Vertex(mutuallyVisible.Value.position, itr++);
+        _vertices.Add(mutuallyVisibleCopy.position);
+        innerXMostCopy = new Vertex(innerXMost.Value.position, itr++);
+        _vertices.Add(innerXMostCopy.position);
     }
 
-    private Vector2 FindXMostVertex(List<Vector2> pVertices)
+    private LinkedListNode<Vertex> FindXMostVertex()
     {
-        Vector2 currentBest = Vector2.negativeInfinity;
-        foreach (var vertex in pVertices)
+        LinkedListNode<Vertex> currentBest = null;
+        for(LinkedListNode<Vertex> currentVertex = innerPolygon.First; currentVertex != null; currentVertex = currentVertex.Next)
         {
-            if (vertex.x > currentBest.x)
-                currentBest = vertex;
+            if (currentBest == null || currentVertex.Value.position.x > currentBest.Value.position.x)
+                currentBest = currentVertex;
         }
 
-        Debug.Log("X most position of the hole was " + currentBest);
+        Debug.Log($"Inner polygon vertex with the highest x-coordinate value was {currentBest.Value.index} with the position {currentBest.Value.index}");
         return currentBest;
     }
 
-    private LinkedListNode<Vector2> FindMutuallyVisibleVertex(Vector2 pXMostVertex)
+    private LinkedListNode<Vertex> FindMutuallyVisibleVertex()
     {
-        LinkedListNode<Vector2> currentVertex = vertices2D.First;
+        LinkedListNode<Vertex> currentVertex = outerPolygon.First;
         if (currentVertex == null)
         {
             Debug.LogError("Cannot find polygon vertices! Abort!");
             return null;
         }
         
-        LinkedListNode<Vector2> closestIntersectionEdge = null;
+        LinkedListNode<Vertex> closestIntersectionEdge = null;
         float closestIntersectionDistance = float.PositiveInfinity;
         Vector2 directionVector = Vector2.right;
 
         //Source: https://rootllama.wordpress.com/2014/06/20/ray-line-segment-intersection-test-in-2d/
-        for (int i = 0; i < vertices2D.Count; i++)
+        for (int i = 0; i < outerPolygon.Count; i++)
         {
             //Circular extension
             var next = currentVertex.Next ?? currentVertex.List.First;
             
             //Edge of the outer polygon must be right the x-most vertex of the inner polygon.
-            if (currentVertex.Value.x <= pXMostVertex.x || next.Value.x <= pXMostVertex.x)
+            if (currentVertex.Value.position.x <= innerXMost.Value.position.x || next.Value.position.x <= innerXMost.Value.position.x)
             {
-                Debug.Log("x-most vertex is " + pXMostVertex + " while the current edge was at " + currentVertex.Value + " and " + next.Value);
+                Debug.Log($"Inner polygon vertex with the highest x-coordinate value was {innerXMost.Value.position}, " +
+                          $"while the current edge was at {currentVertex.Value.position} and {next.Value.position}");
                 currentVertex = currentVertex.Next;
                 continue;
             }
             
-            Debug.Log("Found edge right to x-most point which is " + currentVertex.Value + "and " + next.Value);
+            Debug.Log($"Found edge right to vertex with the highest x-coordinate value at {currentVertex.Value.position} and {next.Value.position}");
 
             //=========================================================Clean========================================================
             
             //Todo:
             //Current and next should be the way around, but gives crazy values
             
-            Vector2 v1 = pXMostVertex - next.Value;
-            Vector2 v2 = currentVertex.Value - next.Value;
+            Vector2 v1 = innerXMost.Value.position - next.Value.position;
+            Vector2 v2 = currentVertex.Value.position - next.Value.position;
             Vector2 v3 = new Vector2(-directionVector.y, directionVector.x);
 
             float t1 = Vector3.Cross(v2, v1).magnitude / Vector2.Dot(v2, v3);
@@ -215,9 +242,9 @@ public class Polygon
 
             if (t1 >= 0 && t2 >= 0 && t2 <= 1)
             {
-                Vector2 intersectionPoint = pXMostVertex + directionVector * t1;
+                Vector2 intersectionPoint = innerXMost.Value.position + directionVector * t1;
                 Debug.Log("Intersection point was at " + intersectionPoint);
-                Vector2 intersectionDistance = intersectionPoint - pXMostVertex;
+                Vector2 intersectionDistance = intersectionPoint - innerXMost.Value.position;
                 
                 if (closestIntersectionEdge == null || intersectionDistance.magnitude < closestIntersectionDistance)
                 {
@@ -237,12 +264,17 @@ public class Polygon
         
         //Find best-edge x-most point
         var secondPointOfEdge = closestIntersectionEdge.Next ?? closestIntersectionEdge.List.First;
-        LinkedListNode<Vector2> mutuallyVisibleVertex = closestIntersectionEdge.Value.x > secondPointOfEdge.Value.x
+        LinkedListNode<Vertex> mutuallyVisibleVertex = closestIntersectionEdge.Value.position.x > secondPointOfEdge.Value.position.x
             ? closestIntersectionEdge
             : secondPointOfEdge;
         
         
-        Debug.Log("The mutually visible point was " + mutuallyVisibleVertex.Value);
-        return secondPointOfEdge;
+        Debug.Log($"The mutually visible point was vertex with index {mutuallyVisibleVertex.Value.index} and position {mutuallyVisibleVertex.Value.position}.");
+        return mutuallyVisibleVertex;
+    }
+
+    public List<Vector2> GetVertices()
+    {
+        return _vertices;
     }
 }
