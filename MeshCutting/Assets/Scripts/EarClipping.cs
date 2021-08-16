@@ -36,21 +36,18 @@ public class EarClipping
             var next = current.Next ?? current.List.First;
             current.Value.isConvex = IsConvex(previous.Value.position, current.Value.position, next.Value.position);
         }
-        
-        Debug.LogWarning("vertices as added by the polygon are now: ");
-        foreach (var vertex in vertices)
-        {
-            Debug.Log($"Vertex {vertex.index} has the value {vertex.position} and IsConvex is {vertex.isConvex}");
-        }
     }
 
     public int[] Triangulate()
     {
         int[] tris = new int[(vertices.Count - 2) * 3];
         int trisIndex = 0;
+
         while (vertices.Count >= 3)
         {
-            for (LinkedListNode<Vertex> currentVertexNode = vertices.First; currentVertexNode != null; currentVertexNode = currentVertexNode.Next)
+            for (LinkedListNode<Vertex> currentVertexNode = vertices.First;
+                currentVertexNode != null;
+                currentVertexNode = currentVertexNode.Next)
             {
                 var previous = currentVertexNode.Previous ?? currentVertexNode.List.Last;
                 var next = currentVertexNode.Next ?? currentVertexNode.List.First;
@@ -59,25 +56,30 @@ public class EarClipping
                     if (IsEar(previous.Value.position, currentVertexNode.Value.position, next.Value.position))
                     {
                         vertices.Remove(currentVertexNode);
+                        
                         //Create triangle
                         tris[trisIndex * 3] = previous.Value.index;
                         tris[trisIndex * 3 + 1] = currentVertexNode.Value.index;
                         tris[trisIndex * 3 + 2] = next.Value.index;
                         trisIndex += 1;
-                        
+
+                        Debug.Log($"The vertex {currentVertexNode.Value.index} at position {currentVertexNode.Value.position} was convex and had an ear");
+
                         //Check if previous and next vertices are reflex and if so; recalculate
                         if (!previous.Value.isConvex)
                         {
-                            previous.Value.isConvex = IsConvex(previous.Value.position, next.Value.position, 
-                                (next.Next ?? vertices.First).Value.position);
+                            bool convex = IsConvex((previous.Previous ?? previous.List.Last).Value.position, previous.Value.position, next.Value.position);
+                            Debug.Log($"The previous vertex IsConvex is {convex}");
+                            previous.Value.isConvex = convex;
                         }
 
                         if (!next.Value.isConvex)
                         {
-                            next.Value.isConvex = IsConvex((previous.Previous ?? vertices.Last).Value.position, previous.Value.position,
-                                next.Value.position);
+                            bool convex = IsConvex(previous.Value.position, next.Value.position, (next.Next ?? next.List.First).Value.position);
+                            Debug.Log("The previous vertex IsConvex is " + convex);
+                            next.Value.isConvex = convex;
                         }
-                        
+
                         break;
                     }
                 }
@@ -93,7 +95,7 @@ public class EarClipping
         float pbcArea = TriangleArea(point, b, c);
         float pacArea = TriangleArea(a, point, c);
         float pabArea = TriangleArea(a, b, point);
-        return abcArea == (pbcArea + pacArea + pabArea);
+        return (abcArea - (pbcArea + pacArea + pabArea)) > 0.01f;
     }
 
     private float TriangleArea(Vector2 a, Vector2 b, Vector2 c)
@@ -106,26 +108,25 @@ public class EarClipping
         //Is this possibly an ear?
         foreach (var vertex in vertices)
         {
-            if (vertex.position == previous || vertex.position == current || vertex.position == next)
-                continue;
-    
+            //if (previous == vertex.position || current == vertex.position || next == vertex.position) continue;
+            
             if (IsInTriangle(previous, current, next, vertex.position))
                 return false;
         }
-        
+         
         return true;
     }
 
     private bool IsConvex(Vector2 previous, Vector2 current, Vector2 next)
     {
         //Convex or Reflex?
-        Vector2 edge1 = next - current;
-        Vector2 edge2 = previous - current;
+        Vector2 edge1 = (next - current).normalized;
+        Vector2 edge2 = (previous - current).normalized;
         float cross = edge1.x * edge2.y - edge1.y * edge2.x;
         float dot = Vector2.Dot(edge1, edge2);
         float angle = Mathf.Atan2(Mathf.Abs(cross), dot) * Mathf.Rad2Deg;
         if (cross > 0) angle = 360 - angle;
-        Debug.Log("Angle was " + angle);
+        //Debug.Log("Angle was " + angle);
         return angle < 180.0f;
     }
 }
@@ -193,8 +194,7 @@ public class Polygon
             if (currentBest == null || currentVertex.Value.position.x > currentBest.Value.position.x)
                 currentBest = currentVertex;
         }
-
-        Debug.Log($"Inner polygon vertex with the highest x-coordinate value was {currentBest.Value.index} with the position {currentBest.Value.index}");
+        
         return currentBest;
     }
 
@@ -220,13 +220,13 @@ public class Polygon
             //Edge of the outer polygon must be right the x-most vertex of the inner polygon.
             if (currentVertex.Value.position.x <= innerXMost.Value.position.x || next.Value.position.x <= innerXMost.Value.position.x)
             {
-                Debug.Log($"Inner polygon vertex with the highest x-coordinate value was {innerXMost.Value.position}, " +
-                          $"while the current edge was at {currentVertex.Value.position} and {next.Value.position}");
+                // Debug.Log($"Inner polygon vertex with the highest x-coordinate value was {innerXMost.Value.position}, " +
+                //           $"while the current edge was at {currentVertex.Value.position} and {next.Value.position}");
                 currentVertex = currentVertex.Next;
                 continue;
             }
             
-            Debug.Log($"Found edge right to vertex with the highest x-coordinate value at {currentVertex.Value.position} and {next.Value.position}");
+            //Debug.Log($"Found edge right to vertex with the highest x-coordinate value at {currentVertex.Value.position} and {next.Value.position}");
 
             //=========================================================Clean========================================================
             
@@ -243,7 +243,7 @@ public class Polygon
             if (t1 >= 0 && t2 >= 0 && t2 <= 1)
             {
                 Vector2 intersectionPoint = innerXMost.Value.position + directionVector * t1;
-                Debug.Log("Intersection point was at " + intersectionPoint);
+                //Debug.Log("Intersection point was at " + intersectionPoint);
                 Vector2 intersectionDistance = intersectionPoint - innerXMost.Value.position;
                 
                 if (closestIntersectionEdge == null || intersectionDistance.magnitude < closestIntersectionDistance)
@@ -269,7 +269,7 @@ public class Polygon
             : secondPointOfEdge;
         
         
-        Debug.Log($"The mutually visible point was vertex with index {mutuallyVisibleVertex.Value.index} and position {mutuallyVisibleVertex.Value.position}.");
+        //Debug.Log($"The mutually visible point was vertex with index {mutuallyVisibleVertex.Value.index} and position {mutuallyVisibleVertex.Value.position}.");
         return mutuallyVisibleVertex;
     }
 

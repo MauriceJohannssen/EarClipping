@@ -59,12 +59,12 @@ public class Shooting : MonoBehaviour
         //Create hole polygon
         Vector2 hitPosition = new Vector2(pHitPosition.x, pHitPosition.y);
         List<Vector2> hole = new List<Vector2>();
-        int step = 4;
+        int step = 10;
         for (int i = 0; i < step; i++) 
         {
-             Vector2 newVertex = hitPosition + new Vector2(Mathf.Cos((2 * Mathf.PI / step) * i), Mathf.Sin((2 * Mathf.PI / step) * i)) * 0.1f;
+             Vector2 newVertex = hitPosition + new Vector2(Mathf.Cos((2 * Mathf.PI / step) * i), Mathf.Sin((2 * Mathf.PI / step) * i)) * Random.Range(0.05f, 0.15f);
              hole.Add(newVertex);
-             Debug.Log($"Hole element {i} was {newVertex}");
+             //Debug.Log($"Hole element {i} was {newVertex}");
         }
         
         polygon.AddHole(hole);
@@ -79,19 +79,11 @@ public class Shooting : MonoBehaviour
         int itr = 0;
         foreach(var vertex in polygon.GetVertices())
         {
-            Vector2 currentVertex = vertex;
-            Debug.Log("Added vertex " + vertex);
-            flatVertex3D[itr++] = new Vector3(currentVertex.x, currentVertex.y, 0);
+            flatVertex3D[itr++] = new Vector3(vertex.x, vertex.y, 0);
         }
         
         newMesh.vertices = flatVertex3D;
-        int[] trisses = _earClipping.Triangulate();
-        newMesh.triangles = trisses;
-        
-        for (int i = 0; i < trisses.Length; i += 3)
-        {
-            Debug.LogWarning($"The returned triangles were {trisses[i]}, {trisses[i + 1]} and {trisses[i + 2]}");
-        }
+        newMesh.triangles = _earClipping.Triangulate();;
         
         newMesh.RecalculateNormals();
         meshFilter.mesh = newMesh;
