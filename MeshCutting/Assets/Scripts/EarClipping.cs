@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Security;
 using UnityEngine;
 using UnityEngine.InputSystem.Interactions;
 
@@ -15,19 +16,24 @@ public class EarClipping
             vertices.AddLast(currentVertex);
         }
 
-        bool ranOnce = true;
-        LinkedListNode<Vertex> startNode = vertices.Find(pPolygon.mutuallyVisible.Value);
-        for (LinkedListNode<Vertex> currentNode = pPolygon.innerXMost; currentNode != pPolygon.innerXMost || ranOnce; currentNode = currentNode.Next ?? currentNode.List.First)
+        if (pPolygon.innerPolygon != null)
         {
-            ranOnce = false;
-            LinkedListNode<Vertex> test = new LinkedListNode<Vertex>(currentNode.Value);
-            vertices.AddAfter(startNode, test);
-            startNode = test;
-        }
+            bool ranOnce = true;
+            LinkedListNode<Vertex> startNode = vertices.Find(pPolygon.mutuallyVisible.Value);
+            for (LinkedListNode<Vertex> currentNode = pPolygon.innerXMost;
+                currentNode != pPolygon.innerXMost || ranOnce;
+                currentNode = currentNode.Next ?? currentNode.List.First)
+            {
+                ranOnce = false;
+                LinkedListNode<Vertex> test = new LinkedListNode<Vertex>(currentNode.Value);
+                vertices.AddAfter(startNode, test);
+                startNode = test;
+            }
 
-        vertices.AddAfter(startNode, pPolygon.innerXMostCopy);
-        startNode = vertices.Find(pPolygon.innerXMostCopy);
-        vertices.AddAfter(startNode, pPolygon.mutuallyVisibleCopy);
+            vertices.AddAfter(startNode, pPolygon.innerXMostCopy);
+            startNode = vertices.Find(pPolygon.innerXMostCopy);
+            vertices.AddAfter(startNode, pPolygon.mutuallyVisibleCopy);
+        }
 
         //Then check if convex :)
         for (LinkedListNode<Vertex> current = vertices.First; current != null; current = current.Next)
@@ -88,21 +94,7 @@ public class EarClipping
 
         return tris;
     }
-
-    private bool IsInTriangle(Vector2 a, Vector2 b, Vector2 c, Vector2 point)
-    {
-        float abcArea = TriangleArea(a, b, c);
-        float pbcArea = TriangleArea(point, b, c);
-        float pacArea = TriangleArea(a, point, c);
-        float pabArea = TriangleArea(a, b, point);
-        return (abcArea - (pbcArea + pacArea + pabArea)) > 0.01f;
-    }
-
-    private float TriangleArea(Vector2 a, Vector2 b, Vector2 c)
-    {
-        return Math.Abs((a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y)) / 2.0f);
-    }
-
+    
     private bool IsEar(Vector2 previous, Vector2 current, Vector2 next)
     {
         //Is this possibly an ear?
@@ -110,7 +102,7 @@ public class EarClipping
         {
             //if (previous == vertex.position || current == vertex.position || next == vertex.position) continue;
             
-            if (IsInTriangle(previous, current, next, vertex.position))
+            if (Triangle.IsInTriangle(previous, current, next, vertex.position))
                 return false;
         }
          
@@ -122,12 +114,7 @@ public class EarClipping
         //Convex or Reflex?
         Vector2 edge1 = (next - current).normalized;
         Vector2 edge2 = (previous - current).normalized;
-        float cross = edge1.x * edge2.y - edge1.y * edge2.x;
-        float dot = Vector2.Dot(edge1, edge2);
-        float angle = Mathf.Atan2(Mathf.Abs(cross), dot) * Mathf.Rad2Deg;
-        if (cross > 0) angle = 360 - angle;
-        //Debug.Log("Angle was " + angle);
-        return angle < 180.0f;
+        return Vector2Extension.AngleFullDegrees(edge1, edge2) < 180.0f;
     }
 }
 
@@ -210,6 +197,7 @@ public class Polygon
         LinkedListNode<Vertex> closestIntersectionEdge = null;
         float closestIntersectionDistance = float.PositiveInfinity;
         Vector2 directionVector = Vector2.right;
+        Vector2? intersectionPoint = null;
 
         //Source: https://rootllama.wordpress.com/2014/06/20/ray-line-segment-intersection-test-in-2d/
         for (int i = 0; i < outerPolygon.Count; i++)
@@ -228,11 +216,6 @@ public class Polygon
             
             //Debug.Log($"Found edge right to vertex with the highest x-coordinate value at {currentVertex.Value.position} and {next.Value.position}");
 
-            //=========================================================Clean========================================================
-            
-            //Todo:
-            //Current and next should be the way around, but gives crazy values
-            
             Vector2 v1 = innerXMost.Value.position - next.Value.position;
             Vector2 v2 = currentVertex.Value.position - next.Value.position;
             Vector2 v3 = new Vector2(-directionVector.y, directionVector.x);
@@ -242,9 +225,9 @@ public class Polygon
 
             if (t1 >= 0 && t2 >= 0 && t2 <= 1)
             {
-                Vector2 intersectionPoint = innerXMost.Value.position + directionVector * t1;
+                intersectionPoint = innerXMost.Value.position + directionVector * t1;
                 //Debug.Log("Intersection point was at " + intersectionPoint);
-                Vector2 intersectionDistance = intersectionPoint - innerXMost.Value.position;
+                Vector2 intersectionDistance = (Vector2)intersectionPoint - innerXMost.Value.position;
                 
                 if (closestIntersectionEdge == null || intersectionDistance.magnitude < closestIntersectionDistance)
                 {
@@ -268,7 +251,24 @@ public class Polygon
             ? closestIntersectionEdge
             : secondPointOfEdge;
         
-        
+        float currentShortestAngle = float.PositiveInfinity;
+        for (LinkedListNode<Vertex> outerVertex = outerPolygon.First; outerVertex != null; outerVertex = outerVertex.Next)
+        {
+            if (intersectionPoint == null) throw new ArgumentException("No intersection-point found.");
+            if(Triangle.IsInTriangle(innerXMost.Value.position, (Vector2)intersectionPoint ,outerVertex.Value.position, mutuallyVisibleVertex.Value.position))
+            {
+                //Take the one with the smallest angle
+                float currentAngle = Vector2Extension.AngleFullDegrees(
+                    mutuallyVisibleVertex.Value.position - innerXMost.Value.position,
+                    (Vector2) intersectionPoint - innerXMost.Value.position);
+                if (currentAngle < currentShortestAngle)
+                {
+                    mutuallyVisibleVertex = outerVertex;
+                    currentShortestAngle = currentAngle;
+                }
+            }
+        }
+
         //Debug.Log($"The mutually visible point was vertex with index {mutuallyVisibleVertex.Value.index} and position {mutuallyVisibleVertex.Value.position}.");
         return mutuallyVisibleVertex;
     }
@@ -276,5 +276,34 @@ public class Polygon
     public List<Vector2> GetVertices()
     {
         return _vertices;
+    }
+}
+
+public class Triangle
+{
+    public static float TriangleArea(Vector2 a, Vector2 b, Vector2 c)
+    {
+        return Math.Abs((a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y)) / 2.0f);
+    }
+
+    public static bool IsInTriangle(Vector2 a, Vector2 b, Vector2 c, Vector2 point)
+    {
+        float abcArea = TriangleArea(a, b, c);
+        float pbcArea = TriangleArea(point, b, c);
+        float pacArea = TriangleArea(a, point, c);
+        float pabArea = TriangleArea(a, b, point);
+        return (abcArea - (pbcArea + pacArea + pabArea)) > 0.01f;
+    }
+}
+
+public class Vector2Extension
+{
+    public static float AngleFullDegrees(Vector2 edge1, Vector2 edge2)
+    {
+        float cross = edge1.x * edge2.y - edge1.y * edge2.x;
+        float dot = Vector2.Dot(edge1, edge2);
+        float angle = Mathf.Atan2(Mathf.Abs(cross), dot) * Mathf.Rad2Deg;
+        if (cross > 0) angle = 360 - angle;
+        return angle;
     }
 }

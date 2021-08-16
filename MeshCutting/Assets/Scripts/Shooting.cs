@@ -7,6 +7,7 @@ public class Shooting : MonoBehaviour
 {
     [SerializeField] private Vector3 shift;
     [SerializeField] private float range;
+    [SerializeField] private Material material;
     private PlayerInput _playerInput;
     private EarClipping _earClipping;
 
@@ -87,6 +88,35 @@ public class Shooting : MonoBehaviour
         
         newMesh.RecalculateNormals();
         meshFilter.mesh = newMesh;
+        
+        //Create cut polygon
+        hole.Reverse();
+        Polygon cutPolygon = new Polygon(hole);
+        _earClipping.SetupClipping(cutPolygon);
+        
+        Mesh cutMesh = new Mesh();
+        
+        Vector3[] flatCutVertex3D = new Vector3[hole.Count];
+        itr = 0;
+        
+        foreach(var vertex in cutPolygon.GetVertices())
+        {
+            flatCutVertex3D[itr++] = new Vector3(vertex.x, vertex.y, 0);
+        }
+        
+        cutMesh.vertices = flatCutVertex3D;
+        cutMesh.triangles = _earClipping.Triangulate();
+        cutMesh.RecalculateNormals();
+        
+        GameObject cutPolygonGameObject = new GameObject();
+        cutPolygonGameObject.AddComponent<MeshFilter>().mesh = cutMesh;
+        cutPolygonGameObject.AddComponent<MeshRenderer>().material = material;
+        cutPolygonGameObject.AddComponent<MeshCollider>().convex = true;
+        cutPolygonGameObject.AddComponent<Rigidbody>().AddForce(transform.forward * 500.0f, ForceMode.Force);
+        
+        cutPolygonGameObject.transform.position = pGameObject.transform.position;
+        cutPolygonGameObject.transform.localScale = pGameObject.transform.localScale;
+        cutPolygonGameObject.transform.rotation = pGameObject.transform.rotation;
     }
 
     private void OnDrawGizmos()
