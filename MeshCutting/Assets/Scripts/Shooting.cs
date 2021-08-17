@@ -7,11 +7,13 @@ public class Shooting : MonoBehaviour
 {
     [SerializeField] private Vector3 shift;
     [SerializeField] private float range;
-    [SerializeField] private Material material;
+    
+    [Header("Destruction")] 
+    [SerializeField] private int cutPolygonStep;
+    
     private PlayerInput _playerInput;
     private EarClipping _earClipping;
-
-    // Start is called before the first frame update
+    
     private void Start()
     {
         _playerInput = transform.parent.parent.GetComponent<PlayerInput>();
@@ -24,99 +26,112 @@ public class Shooting : MonoBehaviour
         if (Physics.Raycast(transform.position + shift, transform.forward, out RaycastHit raycastHit, range))
         {
             if (!raycastHit.transform.tag.Equals("Softwall")) return;
-            TransformTo2D(raycastHit.transform.gameObject,
-                raycastHit.transform.InverseTransformPoint(raycastHit.point));
+            CutPolygon(raycastHit.transform.gameObject, raycastHit.transform.InverseTransformPoint(raycastHit.point));
         }
     }
 
-    private void TransformTo2D(GameObject pGameObject, Vector3 pHitPosition)
+    private void CutPolygon(GameObject pGameObject, Vector3 pHitPosition)
     {
+        //Projection
         MeshFilter meshFilter = pGameObject.GetComponent<MeshFilter>();
-        List<Vector3> originalVertices = new List<Vector3>();
-        meshFilter.mesh.GetVertices(originalVertices);
-
-        //Mesh projection
-        List<Vector2> vertices2D = new List<Vector2>();
-        foreach (var currentVertex in originalVertices)
-        {
-            Vector2 flatVertex2D = new Vector3(currentVertex.x, currentVertex.y);
-            if (!vertices2D.Contains(flatVertex2D))
-            {
-                vertices2D.Add(flatVertex2D);
-            }
-        }
+        List<Vector2> flatVertices2D = TransformTo2D(meshFilter.mesh);
         
-        //Todo: Implement any convex hull algorithm
-        //Only do this at an OG box.
+        //Sorting
+        //TODO: Implement a convex hull algorithm
+        //Only do this at a primitive box the first time to order its vertices, this is due to the order after the projection.
         //This will be replaced by a convex hull algorithm.
         //Vertices are now rotated clockwise!
-        Vector2 vecSwap = vertices2D.ElementAt(2);
-        vertices2D[2] = vertices2D[3];
-        vertices2D[3] = vecSwap;
+        Vector2 vecSwap = flatVertices2D.ElementAt(2);
+        flatVertices2D[2] = flatVertices2D[3];
+        flatVertices2D[3] = vecSwap;
         
-        //Polygon
-        Polygon polygon = new Polygon(vertices2D);
-        
-        //Create hole polygon
-        Vector2 hitPosition = new Vector2(pHitPosition.x, pHitPosition.y);
-        List<Vector2> hole = new List<Vector2>();
-        int step = 10;
-        for (int i = 0; i < step; i++) 
-        {
-             Vector2 newVertex = hitPosition + new Vector2(Mathf.Cos((2 * Mathf.PI / step) * i), Mathf.Sin((2 * Mathf.PI / step) * i)) * Random.Range(0.05f, 0.15f);
-             hole.Add(newVertex);
-             //Debug.Log($"Hole element {i} was {newVertex}");
-        }
-        
-        polygon.AddHole(hole);
+        //Create polygon
+        Polygon polygon = new Polygon(flatVertices2D);
+        //Create cut-polygon
+        Polygon cutPolygon = CreateCutPolygon(pHitPosition);
         
         //Weiler-Atherton Clipping
         //Todo: Implement Weiler-Atherton algorithm
         
-        //Ear-clipping triangulation
+        //Ear clipping triangulation
+        polygon.AddInnerPolygon(cutPolygon.GetVertices());
         _earClipping.SetupClipping(polygon);
+        
         Mesh newMesh = new Mesh();
-        Vector3[] flatVertex3D = new Vector3[_earClipping.vertices.Count];
+        Vector3[] flatVertices3D = new Vector3[_earClipping.vertices.Count];
         int itr = 0;
         foreach(var vertex in polygon.GetVertices())
         {
-            flatVertex3D[itr++] = new Vector3(vertex.x, vertex.y, 0);
+            flatVertices3D[itr++] = new Vector3(vertex.x, vertex.y, 0);
         }
         
-        newMesh.vertices = flatVertex3D;
-        newMesh.triangles = _earClipping.Triangulate();;
-        
+        newMesh.vertices = flatVertices3D;
+        newMesh.triangles = _earClipping.Triangulate();
         newMesh.RecalculateNormals();
         meshFilter.mesh = newMesh;
+
+        CreateCutPolygonGameObject(cutPolygon.GetVertices(), pGameObject);
+    }
+
+    private List<Vector2> TransformTo2D(Mesh pMesh)
+    {
+        //This simply returns the meshes vertices as 2D vectors
+        List<Vector2> vertices2D = new List<Vector2>();
+        foreach (var currentVertex in pMesh.vertices)
+        {
+            if (!vertices2D.Contains(currentVertex))
+            {
+                vertices2D.Add(currentVertex);
+            }
+        }
+
+        return vertices2D;
+    }
+    
+    private Polygon CreateCutPolygon(Vector2 pHitPosition)
+    {
+        List<Vector2> cutVertices = new List<Vector2>();
+        for (int i = 0; i < cutPolygonStep; i++) 
+        {
+            Vector2 newVertex = pHitPosition + new Vector2(Mathf.Cos((2 * Mathf.PI / cutPolygonStep) * i), 
+                Mathf.Sin((2 * Mathf.PI / cutPolygonStep) * i)) * Random.Range(0.05f, 0.15f);
+            cutVertices.Add(newVertex);
+        }
         
-        //Create cut polygon
-        hole.Reverse();
-        Polygon cutPolygon = new Polygon(hole);
+        return new Polygon(cutVertices);
+    }
+
+    private GameObject CreateCutPolygonGameObject(List<Vector2> pVertices, GameObject pGameObject)
+    {
+        pVertices.Reverse();
+        Polygon cutPolygon = new Polygon(pVertices);
         _earClipping.SetupClipping(cutPolygon);
         
-        Mesh cutMesh = new Mesh();
-        
-        Vector3[] flatCutVertex3D = new Vector3[hole.Count];
-        itr = 0;
+        Vector3[] flatCutVertex3D = new Vector3[pVertices.Count];
+        int itr = 0;
         
         foreach(var vertex in cutPolygon.GetVertices())
         {
             flatCutVertex3D[itr++] = new Vector3(vertex.x, vertex.y, 0);
         }
-        
+                
+        Mesh cutMesh = new Mesh();
         cutMesh.vertices = flatCutVertex3D;
         cutMesh.triangles = _earClipping.Triangulate();
         cutMesh.RecalculateNormals();
         
         GameObject cutPolygonGameObject = new GameObject();
         cutPolygonGameObject.AddComponent<MeshFilter>().mesh = cutMesh;
-        cutPolygonGameObject.AddComponent<MeshRenderer>().material = material;
+        cutPolygonGameObject.AddComponent<MeshRenderer>();
         cutPolygonGameObject.AddComponent<MeshCollider>().convex = true;
+        
         cutPolygonGameObject.AddComponent<Rigidbody>().AddForce(transform.forward * 500.0f, ForceMode.Force);
         
         cutPolygonGameObject.transform.position = pGameObject.transform.position;
         cutPolygonGameObject.transform.localScale = pGameObject.transform.localScale;
         cutPolygonGameObject.transform.rotation = pGameObject.transform.rotation;
+
+        return cutPolygonGameObject;
     }
 
     private void OnDrawGizmos()
