@@ -13,12 +13,14 @@ public class Shooting : MonoBehaviour
     
     private PlayerInput _playerInput;
     private EarClipping _earClipping;
+    private Dictionary<GameObject, Polygon> _allPolygons;
     
     private void Start()
     {
         _playerInput = transform.parent.parent.GetComponent<PlayerInput>();
         _playerInput.actions.FindAction("Shoot").performed += Shoot;
         _earClipping = new EarClipping();
+        _allPolygons = new Dictionary<GameObject, Polygon>();
     }
 
     private void Shoot(InputAction.CallbackContext pCallback)
@@ -35,18 +37,27 @@ public class Shooting : MonoBehaviour
         //Projection
         MeshFilter meshFilter = pGameObject.GetComponent<MeshFilter>();
         List<Vector2> flatVertices2D = TransformTo2D(meshFilter.mesh);
+
+        Polygon currentPolygon;
+
+        if (_allPolygons.Keys.Contains(pGameObject))
+            currentPolygon = _allPolygons[pGameObject];
+        else
+        {
+            //Sorting
+            //TODO: Implement a convex hull algorithm
+            //Only do this at a primitive box the first time to order its vertices, this is due to the order after the projection.
+            //This will be replaced by a convex hull algorithm.
+            //Vertices are now rotated clockwise!
+            Vector2 vecSwap = flatVertices2D.ElementAt(2);
+            flatVertices2D[2] = flatVertices2D[3];
+            flatVertices2D[3] = vecSwap;
+            
+            //Create polygon
+            currentPolygon = new Polygon(flatVertices2D);
+            _allPolygons.Add(pGameObject, currentPolygon);
+        }
         
-        //Sorting
-        //TODO: Implement a convex hull algorithm
-        //Only do this at a primitive box the first time to order its vertices, this is due to the order after the projection.
-        //This will be replaced by a convex hull algorithm.
-        //Vertices are now rotated clockwise!
-        Vector2 vecSwap = flatVertices2D.ElementAt(2);
-        flatVertices2D[2] = flatVertices2D[3];
-        flatVertices2D[3] = vecSwap;
-        
-        //Create polygon
-        Polygon polygon = new Polygon(flatVertices2D);
         //Create cut-polygon
         Polygon cutPolygon = CreateCutPolygon(pHitPosition);
         
@@ -54,13 +65,13 @@ public class Shooting : MonoBehaviour
         //Todo: Implement Weiler-Atherton algorithm
         
         //Ear clipping triangulation
-        polygon.AddInnerPolygon(cutPolygon.GetVertices());
-        _earClipping.SetupClipping(polygon);
+        currentPolygon.AddInnerPolygon(cutPolygon);
+        _earClipping.SetupClipping(currentPolygon);
         
         Mesh newMesh = new Mesh();
-        Vector3[] flatVertices3D = new Vector3[_earClipping.vertices.Count];
+        Vector3[] flatVertices3D = new Vector3[_earClipping.straightList.Count];
         int itr = 0;
-        foreach(var vertex in polygon.GetVertices())
+        foreach(var vertex in _earClipping.straightList)
         {
             flatVertices3D[itr++] = new Vector3(vertex.x, vertex.y, 0);
         }
@@ -69,8 +80,8 @@ public class Shooting : MonoBehaviour
         newMesh.triangles = _earClipping.Triangulate();
         newMesh.RecalculateNormals();
         meshFilter.mesh = newMesh;
-
-        CreateCutPolygonGameObject(cutPolygon.GetVertices(), pGameObject);
+        
+        //CreateCutPolygonGameObject(cutPolygon.polygon.ToList(), pGameObject);
     }
 
     private List<Vector2> TransformTo2D(Mesh pMesh)
@@ -110,7 +121,7 @@ public class Shooting : MonoBehaviour
         Vector3[] flatCutVertex3D = new Vector3[pVertices.Count];
         int itr = 0;
         
-        foreach(var vertex in cutPolygon.GetVertices())
+        foreach(var vertex in cutPolygon.polygon.ToList())
         {
             flatCutVertex3D[itr++] = new Vector3(vertex.x, vertex.y, 0);
         }
