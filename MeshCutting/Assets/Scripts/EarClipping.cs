@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 public class EarClipping
 {
@@ -13,6 +12,7 @@ public class EarClipping
         int index = 0;
         vertices = new LinkedList<Vertex>();
         straightList = new List<Vector2>();
+        
         foreach (var currentVertex in pPolygon.polygon)
         {
             vertices.AddLast(new Vertex(currentVertex, index++));
@@ -43,12 +43,9 @@ public class EarClipping
                 LinkedList<Vertex> innerPolygon = new LinkedList<Vertex>();
                 LinkedListNode<Vertex> innerXMost = null;
 
-                for (LinkedListNode<Vector2> currentNode = xMostPolygon.polygon.First;
-                    currentNode != null;
-                    currentNode = currentNode.Next)
+                for (LinkedListNode<Vector2> currentNode = xMostPolygon.polygon.First; currentNode != null; currentNode = currentNode.Next)
                 {
-                    LinkedListNode<Vertex> newVertex =
-                        new LinkedListNode<Vertex>(new Vertex(currentNode.Value, index++));
+                    LinkedListNode<Vertex> newVertex = new LinkedListNode<Vertex>(new Vertex(currentNode.Value, index++));
                     straightList.Add(currentNode.Value);
                     if (currentNode == xMostValue) innerXMost = newVertex;
                     innerPolygon.AddLast(newVertex);
@@ -64,8 +61,7 @@ public class EarClipping
                 bool notOnceRan = true;
                 LinkedListNode<Vertex> startNode = vertices.Find(mutuallyVisible.Value);
 
-                for (LinkedListNode<Vertex> currentNode = innerXMost;
-                    currentNode != innerXMost || notOnceRan;
+                for (LinkedListNode<Vertex> currentNode = innerXMost; currentNode != innerXMost || notOnceRan; 
                     currentNode = currentNode.Next ?? currentNode.List.First)
                 {
                     notOnceRan = false;
@@ -77,9 +73,6 @@ public class EarClipping
                 vertices.AddAfter(startNode, innerXMostCopy);
                 startNode = vertices.Find(innerXMostCopy);
                 vertices.AddAfter(startNode, mutuallyVisibleCopy);
-                
-                Debug.LogError($"inner x most was {innerXMostCopy.position}");
-                Debug.LogError($"mutually visible was {mutuallyVisibleCopy.position}");
 
                 availablePolygons.Remove(xMostPolygon);
             }
@@ -105,9 +98,12 @@ public class EarClipping
         int[] tris = new int[(vertices.Count - 2) * 3];
         int trisIndex = 0;
         int failSave = 0;
+        bool earFound;
 
         while (vertices.Count >= 3)
         {
+            earFound = false;
+            
             for (LinkedListNode<Vertex> currentVertexNode = vertices.First;
                 currentVertexNode != null;
                 currentVertexNode = currentVertexNode.Next)
@@ -116,6 +112,7 @@ public class EarClipping
                 var next = currentVertexNode.Next ?? currentVertexNode.List.First;
                 if (!currentVertexNode.Value.isConvex) continue;
                 if (!IsEar(previous.Value.position, currentVertexNode.Value.position, next.Value.position)) continue;
+                earFound = true;
                 vertices.Remove(currentVertexNode);
 
                 //Create triangle
@@ -142,9 +139,9 @@ public class EarClipping
                 break;
             }
 
-            if (failSave++ > 5000)
+            if (!earFound)
             {
-                Debug.LogError("FAILSAFE");
+                Debug.LogError("No ear found!");
                 break;
             }
         }
@@ -180,9 +177,12 @@ public class EarClipping
         //Find best-edge x-most point
         var secondPointOfEdge = closestIntersectionEdge.Next ?? closestIntersectionEdge.List.First;
         LinkedListNode<Vertex> mutuallyVisibleVertex = closestIntersectionEdge.Value.position.x > secondPointOfEdge.Value.position.x ? closestIntersectionEdge : secondPointOfEdge;
+        
+        
         //This verifies whether there are vertices in the triangle created by the inner x-most point, the intersection point with the outer polygon
         //and the mutually visible vertex. Since these vertices can potentially occlude the mutually visible vertex.
         float currentShortestAngle = float.PositiveInfinity;
+        LinkedListNode<Vertex> tester = null;
         for (LinkedListNode<Vertex> outerVertex = vertices.First; outerVertex != null; outerVertex = outerVertex.Next)
         {
             if (intersectionPoint == null)
@@ -190,28 +190,28 @@ public class EarClipping
                 throw new ArgumentException("No intersection-point found.");
             }
             
-            if(outerVertex.Value.position == innerXMost.Value.position || outerVertex.Value.position == (Vector2) intersectionPoint|| outerVertex.Value.position == mutuallyVisibleVertex.Value.position)
-                continue;
+            //if(outerVertex == mutuallyVisibleVertex) continue;
 
             if (Triangle.IsInTriangle(innerXMost.Value.position, (Vector2) intersectionPoint, mutuallyVisibleVertex.Value.position, outerVertex.Value.position))
             {
                 //Take the one with the smallest angle
-                float currentAngle = Vector2Extension.AngleFullDegrees(
-                    (Vector2) intersectionPoint - innerXMost.Value.position,
-                    mutuallyVisibleVertex.Value.position - innerXMost.Value.position);
+                float currentAngle = Vector2Extension.AngleFullDegrees(innerXMost.Value.position + Vector2.right, outerVertex.Value.position - innerXMost.Value.position);
 
                 if (currentAngle < currentShortestAngle)
                 {
-                    mutuallyVisibleVertex = outerVertex;
+                    tester = outerVertex;
                     currentShortestAngle = currentAngle;
                 }
             }
         }
 
+        if (tester != null) mutuallyVisibleVertex = tester;
+        Debug.LogError("Mutually visisble was at " + mutuallyVisibleVertex.Value.position);
+
         return mutuallyVisibleVertex;
     }
 
-    private LinkedListNode<Vertex> FindClosestIntersectionEdge(ref Vector2? pIntersectionPoint, LinkedListNode<Vertex> innerXMost)
+    private LinkedListNode<Vertex>FindClosestIntersectionEdge(ref Vector2? pIntersectionPoint, LinkedListNode<Vertex> innerXMost)
     {
         LinkedListNode<Vertex> currentVertex = vertices.First;
 
@@ -232,8 +232,7 @@ public class EarClipping
             var nextVertex = currentVertex.Next ?? currentVertex.List.First;
 
             //Edge of the outer polygon must be right the x-most vertex of the inner polygon.
-            if (currentVertex.Value.position.x <= innerXMost.Value.position.x ||
-                nextVertex.Value.position.x <= innerXMost.Value.position.x)
+            if (currentVertex.Value.position.x <= innerXMost.Value.position.x || nextVertex.Value.position.x <= innerXMost.Value.position.x)
             {
                 currentVertex = currentVertex.Next;
                 continue;
@@ -332,7 +331,7 @@ public static class Triangle
         float pbcArea = TriangleArea(point, b, c);
         float pacArea = TriangleArea(a, point, c);
         float pabArea = TriangleArea(a, b, point);
-        return Mathf.Abs(abcArea - (pbcArea + pacArea + pabArea)) < 0.01f;
+        return Mathf.Abs(abcArea - (pbcArea + pacArea + pabArea)) < 0.001f;
     }
 }
 
@@ -340,6 +339,8 @@ public static class Vector2Extension
 {
     public static float AngleFullDegrees(Vector2 edge1, Vector2 edge2)
     {
+        edge1.Normalize();
+        edge2.Normalize();
         float cross = edge1.x * edge2.y - edge1.y * edge2.x;
         float dot = Vector2.Dot(edge1, edge2);
         float angle = Mathf.Atan2(Mathf.Abs(cross), dot) * Mathf.Rad2Deg;

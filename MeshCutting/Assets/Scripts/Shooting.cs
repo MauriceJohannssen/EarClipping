@@ -105,7 +105,7 @@ public class Shooting : MonoBehaviour
         for (int i = 0; i < cutPolygonStep; i++) 
         {
             Vector2 newVertex = pHitPosition + new Vector2(Mathf.Cos((2 * Mathf.PI / cutPolygonStep) * i), 
-                Mathf.Sin((2 * Mathf.PI / cutPolygonStep) * i)) * Random.Range(0.05f, 0.15f);
+                Mathf.Sin((2 * Mathf.PI / cutPolygonStep) * i)) * Random.Range(0.1f, 0.1f);
             cutVertices.Add(newVertex);
         }
         
