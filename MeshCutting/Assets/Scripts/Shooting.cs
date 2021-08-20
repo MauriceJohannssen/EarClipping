@@ -7,13 +7,15 @@ public class Shooting : MonoBehaviour
 {
     [SerializeField] private Vector3 shift;
     [SerializeField] private float range;
-    
-    [Header("Destruction")] 
+
+    [Header("Destruction")]
     [SerializeField] private int cutPolygonStep;
-    
+
     private PlayerInput _playerInput;
     private EarClipping _earClipping;
     private Dictionary<GameObject, Polygon> _allPolygons;
+    private Material lastHitMaterial;
+    private AudioSource sound;
     
     private void Start()
     {
@@ -21,10 +23,12 @@ public class Shooting : MonoBehaviour
         _playerInput.actions.FindAction("Shoot").performed += Shoot;
         _earClipping = new EarClipping();
         _allPolygons = new Dictionary<GameObject, Polygon>();
+        sound = GetComponent<AudioSource>();
     }
 
     private void Shoot(InputAction.CallbackContext pCallback)
     {
+        sound.Play();
         if (Physics.Raycast(transform.position + shift, transform.forward, out RaycastHit raycastHit, range))
         {
             if (!raycastHit.transform.tag.Equals("Softwall")) return;
@@ -36,14 +40,14 @@ public class Shooting : MonoBehaviour
     {
         //Projection
         MeshFilter meshFilter = pGameObject.GetComponent<MeshFilter>();
-        List<Vector2> flatVertices2D = TransformTo2D(meshFilter.mesh);
-
+        lastHitMaterial = pGameObject.GetComponent<MeshRenderer>().material;
+        
         Polygon currentPolygon;
 
-        if (_allPolygons.Keys.Contains(pGameObject))
-            currentPolygon = _allPolygons[pGameObject];
+        if (_allPolygons.Keys.Contains(pGameObject)) currentPolygon = _allPolygons[pGameObject];
         else
         {
+            List<Vector2> flatVertices2D = TransformTo2D(meshFilter.mesh);
             //Sorting
             //TODO: Implement a convex hull algorithm
             //Only do this at a primitive box the first time to order its vertices, this is due to the order after the projection.
@@ -70,20 +74,30 @@ public class Shooting : MonoBehaviour
         
         Mesh newMesh = new Mesh();
         Vector3[] flatVertices3D = new Vector3[_earClipping.straightList.Count];
-        int itr = 0;
-        foreach(var vertex in _earClipping.straightList)
+
+        for (int i = 0; i < _earClipping.straightList.Count; i++)
         {
-            flatVertices3D[itr++] = new Vector3(vertex.x, vertex.y, 0);
+            Vector2 currentVertex = _earClipping.straightList.ElementAt(i);
+            flatVertices3D[i] = new Vector3(currentVertex.x, currentVertex.y,0);
+            
         }
-        
+
         newMesh.vertices = flatVertices3D;
         newMesh.triangles = _earClipping.Triangulate();
+
+        Vector2[] test = new Vector2[_earClipping.straightList.Count];
+        for (int i = 0; i < _earClipping.straightList.Count; i++)
+        {
+            test[i] = new Vector2(0.5f, 0.5f) - _earClipping.straightList.ElementAt(i);
+        }
+
+        newMesh.uv = test;
         newMesh.RecalculateNormals();
         meshFilter.mesh = newMesh;
         
-        //CreateCutPolygonGameObject(cutPolygon.polygon.ToList(), pGameObject);
+        CreateCutPolygonGameObject(cutPolygon.polygon.ToList(), pGameObject);
     }
-
+    
     private List<Vector2> TransformTo2D(Mesh pMesh)
     {
         //This simply returns the meshes vertices as 2D vectors
@@ -105,7 +119,7 @@ public class Shooting : MonoBehaviour
         for (int i = 0; i < cutPolygonStep; i++) 
         {
             Vector2 newVertex = pHitPosition + new Vector2(Mathf.Cos((2 * Mathf.PI / cutPolygonStep) * i), 
-                Mathf.Sin((2 * Mathf.PI / cutPolygonStep) * i)) * Random.Range(0.1f, 0.1f);
+                Mathf.Sin((2 * Mathf.PI / cutPolygonStep) * i)) * Random.Range(0.08f, 0.14f);
             cutVertices.Add(newVertex);
         }
         
@@ -129,11 +143,18 @@ public class Shooting : MonoBehaviour
         Mesh cutMesh = new Mesh();
         cutMesh.vertices = flatCutVertex3D;
         cutMesh.triangles = _earClipping.Triangulate();
+        Vector2[] test = new Vector2[cutPolygon.polygon.Count];
+        for (int i = 0; i < cutPolygon.polygon.Count; i++)
+        {
+            test[i] = new Vector2(0.5f, 0.5f) - cutPolygon.polygon.ElementAt(i);
+        }
+
+        cutMesh.uv = test;
         cutMesh.RecalculateNormals();
         
         GameObject cutPolygonGameObject = new GameObject();
         cutPolygonGameObject.AddComponent<MeshFilter>().mesh = cutMesh;
-        cutPolygonGameObject.AddComponent<MeshRenderer>();
+        cutPolygonGameObject.AddComponent<MeshRenderer>().material = lastHitMaterial;
         cutPolygonGameObject.AddComponent<MeshCollider>().convex = true;
         
         cutPolygonGameObject.AddComponent<Rigidbody>().AddForce(transform.forward * 500.0f, ForceMode.Force);
