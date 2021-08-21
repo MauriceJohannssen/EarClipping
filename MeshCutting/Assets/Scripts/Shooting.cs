@@ -1,7 +1,10 @@
+using System;
 using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine.InputSystem;
+using UnityEngine.Rendering.Universal.Internal;
+using Random = UnityEngine.Random;
 
 public class Shooting : MonoBehaviour
 {
@@ -85,13 +88,13 @@ public class Shooting : MonoBehaviour
         newMesh.vertices = flatVertices3D;
         newMesh.triangles = _earClipping.Triangulate();
 
-        Vector2[] test = new Vector2[_earClipping.straightList.Count];
+        Vector2[] newUVs = new Vector2[_earClipping.straightList.Count];
         for (int i = 0; i < _earClipping.straightList.Count; i++)
         {
-            test[i] = new Vector2(0.5f, 0.5f) - _earClipping.straightList.ElementAt(i);
+            newUVs[i] = new Vector2(0.5f, 0.5f) - _earClipping.straightList.ElementAt(i);
         }
 
-        newMesh.uv = test;
+        newMesh.uv = newUVs;
         newMesh.RecalculateNormals();
         meshFilter.mesh = newMesh;
         
@@ -132,32 +135,60 @@ public class Shooting : MonoBehaviour
         Polygon cutPolygon = new Polygon(pVertices);
         _earClipping.SetupClipping(cutPolygon);
         
-        Vector3[] flatCutVertex3D = new Vector3[pVertices.Count];
-        int itr = 0;
-        
-        foreach(var vertex in cutPolygon.polygon.ToList())
+        Vector3[] flatCutVertex3D = new Vector3[pVertices.Count * 2];
+        Vector2[] cutPolygonVertices = cutPolygon.polygon.ToArray();
+        for (var i = 0; i < cutPolygon.polygon.Count * 2; i++)
         {
-            flatCutVertex3D[itr++] = new Vector3(vertex.x, vertex.y, 0);
+            Vector2 currentVertex = cutPolygonVertices[i % cutPolygonVertices.Length];
+            flatCutVertex3D[i] = new Vector3(currentVertex.x, currentVertex.y, 0);
+        }
+        
+        int[] triangles = _earClipping.Triangulate();
+        int[] newTriangles = new int[triangles.Length * 2];
+        
+        for (int i = 0; i < triangles.Length / 3; i++)
+        {
+            newTriangles[i * 3] = triangles[i * 3];
+            newTriangles[i * 3 + 1] = triangles[i * 3 + 1];
+            newTriangles[i * 3 + 2] = triangles[i * 3 + 2];
+        }
+
+        for (int i = 0; i < triangles.Length / 3; i++)
+        {
+            int tris1 = pVertices.Count + triangles[i * 3];
+            int tris2 = pVertices.Count +triangles[i * 3 + 1];
+
+            int temp = tris1;
+            tris1 = tris2;
+            tris2 = temp;
+
+            newTriangles[triangles.Length + i * 3] = tris1;
+            newTriangles[triangles.Length + i * 3 + 1] = tris2;
+            newTriangles[triangles.Length + i * 3 + 2] = pVertices.Count + triangles[i * 3 + 2];
         }
                 
         Mesh cutMesh = new Mesh();
         cutMesh.vertices = flatCutVertex3D;
-        cutMesh.triangles = _earClipping.Triangulate();
-        Vector2[] test = new Vector2[cutPolygon.polygon.Count];
-        for (int i = 0; i < cutPolygon.polygon.Count; i++)
+        cutMesh.triangles = newTriangles;
+        Vector2[] newUVs = new Vector2[flatCutVertex3D.Length];
+        for (int i = 0; i < flatCutVertex3D.Length; i++)
         {
-            test[i] = new Vector2(0.5f, 0.5f) - cutPolygon.polygon.ElementAt(i);
+            newUVs[i] = new Vector2(0.5f, 0.5f) - (Vector2)flatCutVertex3D.ElementAt(i);
         }
 
-        cutMesh.uv = test;
+        cutMesh.uv = newUVs;
         cutMesh.RecalculateNormals();
         
         GameObject cutPolygonGameObject = new GameObject();
         cutPolygonGameObject.AddComponent<MeshFilter>().mesh = cutMesh;
         cutPolygonGameObject.AddComponent<MeshRenderer>().material = lastHitMaterial;
-        cutPolygonGameObject.AddComponent<MeshCollider>().convex = true;
-        
-        cutPolygonGameObject.AddComponent<Rigidbody>().AddForce(transform.forward * 500.0f, ForceMode.Force);
+        BoxCollider cutPolygonCollider = cutPolygonGameObject.AddComponent<BoxCollider>();
+        Vector3 colliderSize =  cutPolygonCollider.size;
+        cutPolygonCollider.size = new Vector3(colliderSize.x, colliderSize.y, 0.1f);
+
+        Rigidbody cutPolygonRigidbody = cutPolygonGameObject.AddComponent<Rigidbody>();
+        cutPolygonRigidbody.AddForce(transform.forward * 5.0f, ForceMode.Impulse);
+        cutPolygonRigidbody.collisionDetectionMode = CollisionDetectionMode.Continuous;
         
         cutPolygonGameObject.transform.position = pGameObject.transform.position;
         cutPolygonGameObject.transform.localScale = pGameObject.transform.localScale;
