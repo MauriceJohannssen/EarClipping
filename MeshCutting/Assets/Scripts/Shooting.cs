@@ -14,27 +14,30 @@ public class Shooting : MonoBehaviour
     [SerializeField] private int cutPolygonStep;
 
     [SerializeField] private GameObject decalProjector;
+    [SerializeField] private ParticleSystem particleSystem;
 
     private PlayerInput _playerInput;
     private EarClipping _earClipping;
     private Dictionary<GameObject, Polygon> _allPolygons;
-    private Material lastHitMaterial;
-    private AudioSource sound;
-    private List<DecalMesh> _decalMeshes;
-    
+    private Material _lastHitMaterial;
+    private AudioSource _audioSource;
+
     private void Start()
     {
         _playerInput = transform.parent.parent.GetComponent<PlayerInput>();
         _playerInput.actions.FindAction("Shoot").performed += Shoot;
         _earClipping = new EarClipping();
         _allPolygons = new Dictionary<GameObject, Polygon>();
-        sound = GetComponent<AudioSource>();
-        _decalMeshes = new List<DecalMesh>();
+        _audioSource = GetComponent<AudioSource>();
+        particleSystem = transform.GetChild(transform.childCount - 1).GetComponent<ParticleSystem>();
     }
 
     private void Shoot(InputAction.CallbackContext pCallback)
     {
-        sound.Play();
+        _audioSource.Play();
+        LeanTween.cancelAll();
+        transform.LeanMoveLocalZ(1.0f, 0.8f).setEase(LeanTweenType.punch);
+        particleSystem.Play();
         if (Physics.Raycast(transform.position + shift, transform.forward, out RaycastHit raycastHit, range))
         {
             if (!raycastHit.transform.tag.Equals("Softwall")) return;
@@ -46,7 +49,7 @@ public class Shooting : MonoBehaviour
     {
         //Projection
         MeshFilter meshFilter = pGameObject.GetComponent<MeshFilter>();
-        lastHitMaterial = pGameObject.GetComponent<MeshRenderer>().material;
+        _lastHitMaterial = pGameObject.GetComponent<MeshRenderer>().material;
         
         Polygon currentPolygon;
 
@@ -103,7 +106,7 @@ public class Shooting : MonoBehaviour
         
         CreateCutPolygonGameObject(cutPolygon.polygon.ToList(), pGameObject);
         
-        //Decal!
+        //Decal application
         pGameObject.isStatic = true;
         Instantiate(decalProjector, pGameObject.transform.TransformPoint(pHitPosition), pGameObject.transform.rotation).GetComponent<DecalMesh>().GenerateProjectedMeshImmediate();
         pGameObject.isStatic = false;
@@ -189,7 +192,7 @@ public class Shooting : MonoBehaviour
         
         GameObject cutPolygonGameObject = new GameObject();
         cutPolygonGameObject.AddComponent<MeshFilter>().mesh = cutMesh;
-        cutPolygonGameObject.AddComponent<MeshRenderer>().material = lastHitMaterial;
+        cutPolygonGameObject.AddComponent<MeshRenderer>().material = _lastHitMaterial;
         BoxCollider cutPolygonCollider = cutPolygonGameObject.AddComponent<BoxCollider>();
         Vector3 colliderSize =  cutPolygonCollider.size;
         cutPolygonCollider.size = new Vector3(colliderSize.x, colliderSize.y, 0.1f);

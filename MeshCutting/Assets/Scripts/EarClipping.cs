@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using SamDriver.Decal;
 using UnityEngine;
 
 public class EarClipping
@@ -79,11 +78,6 @@ public class EarClipping
             }
         }
 
-        // foreach (var vertex in _vertices)
-        // {
-        //     Debug.LogWarning($"Vertex {vertex.index} is at {vertex.position}");
-        // }
-        
         //Then check if vertices are convex.
         for (LinkedListNode<Vertex> current = _vertices.First; current != null; current = current.Next)
         {
@@ -109,6 +103,10 @@ public class EarClipping
                 var next = currentVertexNode.Next ?? currentVertexNode.List.First;
                 if (!currentVertexNode.Value.isConvex) continue;
                 if (!IsEar(previous.Value, currentVertexNode.Value, next.Value)) continue;
+                
+                earFound = true;
+                _vertices.Remove(currentVertexNode);
+
                 //Check if previous and next vertices are reflex and if so; recalculate
                 if (!previous.Value.isConvex)
                 {
@@ -128,8 +126,6 @@ public class EarClipping
                 tris[trisIndex * 3 + 2] = next.Value.index;
                 trisIndex += 1;
 
-                earFound = true;
-                _vertices.Remove(currentVertexNode);
 
                 break;
             }

@@ -28,7 +28,7 @@ Transform:
   m_GameObject: {fileID: 1715642743146275100}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 1.5, y: 1.5, z: 1}
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 0
@@ -94,7 +94,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1208bbe937c3a54488f1d85a7931055a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  DecalAsset: {fileID: 11400000, guid: 65d690b6d35b7c3408d6521c9b9ca579, type: 2}
+  DecalAsset: {fileID: 11400000, guid: 30ad5c01b9d145949b89f8a8c22bc6f5, type: 2}
   Opacity: 1
   ZFadeDistance: 0.1
   MinAngleFadeDegrees: 83
