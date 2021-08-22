@@ -2654,6 +2654,7 @@ MonoBehaviour:
   shift: {x: 0, y: 0, z: 0.24}
   range: 10
   cutPolygonStep: 12
+  decalProjector: {fileID: 1715642743146275100, guid: b55953a41bb0b1c489d1ecbf4b63b006, type: 3}
 --- !u!82 &7418651747443544396
 AudioSource:
   m_ObjectHideFlags: 0

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using SamDriver.Decal;
 using UnityEngine;
 
 public class EarClipping

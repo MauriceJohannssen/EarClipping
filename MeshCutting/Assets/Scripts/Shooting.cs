@@ -1,9 +1,8 @@
-using System;
 using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
+using SamDriver.Decal;
 using UnityEngine.InputSystem;
-using UnityEngine.Rendering.Universal.Internal;
 using Random = UnityEngine.Random;
 
 public class Shooting : MonoBehaviour
@@ -14,11 +13,14 @@ public class Shooting : MonoBehaviour
     [Header("Destruction")]
     [SerializeField] private int cutPolygonStep;
 
+    [SerializeField] private GameObject decalProjector;
+
     private PlayerInput _playerInput;
     private EarClipping _earClipping;
     private Dictionary<GameObject, Polygon> _allPolygons;
     private Material lastHitMaterial;
     private AudioSource sound;
+    private List<DecalMesh> _decalMeshes;
     
     private void Start()
     {
@@ -27,6 +29,7 @@ public class Shooting : MonoBehaviour
         _earClipping = new EarClipping();
         _allPolygons = new Dictionary<GameObject, Polygon>();
         sound = GetComponent<AudioSource>();
+        _decalMeshes = new List<DecalMesh>();
     }
 
     private void Shoot(InputAction.CallbackContext pCallback)
@@ -99,6 +102,11 @@ public class Shooting : MonoBehaviour
         meshFilter.mesh = newMesh;
         
         CreateCutPolygonGameObject(cutPolygon.polygon.ToList(), pGameObject);
+        
+        //Decal!
+        pGameObject.isStatic = true;
+        Instantiate(decalProjector, pGameObject.transform.TransformPoint(pHitPosition), pGameObject.transform.rotation).GetComponent<DecalMesh>().GenerateProjectedMeshImmediate();
+        pGameObject.isStatic = false;
     }
     
     private List<Vector2> TransformTo2D(Mesh pMesh)
