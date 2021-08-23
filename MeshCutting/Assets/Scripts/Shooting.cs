@@ -34,15 +34,15 @@ public class Shooting : MonoBehaviour
 
     private void Shoot(InputAction.CallbackContext pCallback)
     {
-        _audioSource.Play();
-        LeanTween.cancelAll();
-        transform.LeanMoveLocalZ(1.0f, 0.8f).setEase(LeanTweenType.punch);
-        particleSystem.Play();
         if (Physics.Raycast(transform.position + shift, transform.forward, out RaycastHit raycastHit, range))
         {
             if (!raycastHit.transform.tag.Equals("Softwall")) return;
             CutPolygon(raycastHit.transform.gameObject, raycastHit.transform.InverseTransformPoint(raycastHit.point));
         }
+        _audioSource.Play();
+        LeanTween.cancelAll();
+        transform.LeanMoveLocalZ(1.0f, 0.8f).setEase(LeanTweenType.punch);
+        particleSystem.Play();
     }
 
     private void CutPolygon(GameObject pGameObject, Vector3 pHitPosition)
@@ -82,11 +82,11 @@ public class Shooting : MonoBehaviour
         _earClipping.SetupClipping(currentPolygon);
         
         Mesh newMesh = new Mesh();
-        Vector3[] flatVertices3D = new Vector3[_earClipping.straightList.Count];
+        Vector3[] flatVertices3D = new Vector3[_earClipping.originalVertices.Count];
 
-        for (int i = 0; i < _earClipping.straightList.Count; i++)
+        for (int i = 0; i < _earClipping.originalVertices.Count; i++)
         {
-            Vector2 currentVertex = _earClipping.straightList.ElementAt(i);
+            Vector2 currentVertex = _earClipping.originalVertices.ElementAt(i);
             flatVertices3D[i] = new Vector3(currentVertex.x, currentVertex.y,0);
             
         }
@@ -94,10 +94,10 @@ public class Shooting : MonoBehaviour
         newMesh.vertices = flatVertices3D;
         newMesh.triangles = _earClipping.Triangulate();
 
-        Vector2[] newUVs = new Vector2[_earClipping.straightList.Count];
-        for (int i = 0; i < _earClipping.straightList.Count; i++)
+        Vector2[] newUVs = new Vector2[_earClipping.originalVertices.Count];
+        for (int i = 0; i < _earClipping.originalVertices.Count; i++)
         {
-            newUVs[i] = new Vector2(0.5f, 0.5f) - _earClipping.straightList.ElementAt(i);
+            newUVs[i] = new Vector2(0.5f, 0.5f) - _earClipping.originalVertices.ElementAt(i);
         }
 
         newMesh.uv = newUVs;
