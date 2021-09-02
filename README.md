@@ -6,4 +6,4 @@
     <h3>For more details go to 'Wiki'.</h3>
 </Summary>
 
-![](pictures/exampleDestruction.png)
+https://user-images.githubusercontent.com/60900273/131827300-8e77afde-789e-468f-837d-f0badcb2687b.mp4
