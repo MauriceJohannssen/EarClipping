@@ -181,7 +181,8 @@ public class EarClipping
             
             if(outerVertex == mutuallyVisibleVertex || outerVertex.Value.position == mutuallyVisibleVertex.Value.position) continue;
 
-            if (Triangle.IsInTriangle(innerXMost.Value, (Vector2) intersectionPoint, mutuallyVisibleVertex.Value.position, outerVertex.Value.position))
+            if (Triangle.IsInTriangle(innerXMost.Value, (Vector2) intersectionPoint, 
+                mutuallyVisibleVertex.Value.position, outerVertex.Value.position))
             {
                 //Take the one with the smallest angle
                 float currentAngle = Vector2Extension.AngleFullDegrees((Vector2) intersectionPoint - innerXMost.Value, 

@@ -108,7 +108,8 @@ public class Shooting : MonoBehaviour
         
         //Decal application
         pGameObject.isStatic = true;
-        Instantiate(decalProjector, pGameObject.transform.TransformPoint(pHitPosition), pGameObject.transform.rotation).GetComponent<DecalMesh>().GenerateProjectedMeshImmediate();
+        Instantiate(decalProjector, pGameObject.transform.TransformPoint(pHitPosition), pGameObject.transform.rotation)
+            .GetComponent<DecalMesh>().GenerateProjectedMeshImmediate();
         pGameObject.isStatic = false;
     }
     
