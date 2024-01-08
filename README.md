@@ -5,4 +5,6 @@ using projection, "Ear Clipping", UV interpolation, and decal application to cre
 
 For more details go to [Wiki](https://github.com/MauriceJohannssen/EarClipping/wiki).
 ***
+To be added: Weiler-Atherton Clipping
+***
 https://user-images.githubusercontent.com/60900273/131827300-8e77afde-789e-468f-837d-f0badcb2687b.mp4
